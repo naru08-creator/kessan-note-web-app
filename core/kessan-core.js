@@ -1,7 +1,7 @@
 // 決算ノート — 共通コア（Electron版・Web版で共有するUI本体）
 // ビルド不要：<script type="text/babel"> として読み込む前提。
 // React / ReactDOM / Recharts はグローバル（CDN読み込み）を利用する。
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Cell
@@ -327,6 +327,89 @@ function ChartCard({ title, children }) {
   );
 }
 
+// ── CSVバックアップ機能用のユーティリティ（Electron版のフォルダ保存とは別に、
+//    どちらのプラットフォームでも「zipでバックアップ／読み込み」できるようにするためのもの）──
+const CSV_LABELS = {
+  pl: { sales: '売上高', cogs: '売上原価', sga: '販管費', ordProfit: '経常利益(またはIFRS税引前利益)', netProfit: '当期純利益', eps: 'EPS' },
+  bs: { currentAssets: '流動資産', fixedAssets: '固定資産(のれん含む)', goodwill: 'のれん(内訳参考)', currentLiab: '流動負債', fixedLiab: '固定負債', borrowings: '借入金(内訳参考)', equity: '純資産(または資本合計)' },
+  cf: { beginningCash: '期首現金残高', opCF: '営業CF', invCF: '投資CF', finCF: '財務CF', fxAdjustment: 'その他調整(為替換算差額など)' },
+  kpi: { per: 'PER', pbr: 'PBR', dividend: '配当' },
+};
+
+function csvEscape(v) {
+  const s = String(v ?? '');
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function rowsToCsv(rows) {
+  return rows.map((r) => r.map(csvEscape).join(',')).join('\n');
+}
+
+function csvToRows(text) {
+  const rows = [];
+  let i = 0, field = '', row = [], inQuotes = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += c; i++; continue;
+    } else {
+      if (c === '"') { inQuotes = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ''; i++; continue; }
+      if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); rows.push(row); field = ''; row = []; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.length > 1 || r[0] !== '');
+}
+
+function companyYearToRows(comp, year, yearData) {
+  const rows = [['category', 'key', 'label', 'value']];
+  rows.push(['company', 'name', '会社名', comp.name || '']);
+  rows.push(['company', 'ticker', '証券コード', comp.ticker || '']);
+  rows.push(['company', 'favorite', 'お気に入り(1/0)', comp.favorite ? '1' : '0']);
+  rows.push(['company', 'standard', '会計基準', comp.standard || 'jgaap']);
+  rows.push(['meta', 'year', '年度', year]);
+  PL_KEYS.forEach((k) => rows.push(['pl', k, CSV_LABELS.pl[k] || k, yearData.pl[k] ?? '']));
+  BS_KEYS.forEach((k) => rows.push(['bs', k, CSV_LABELS.bs[k] || k, yearData.bs[k] ?? '']));
+  CF_KEYS.forEach((k) => rows.push(['cf', k, CSV_LABELS.cf[k] || k, yearData.cf[k] ?? '']));
+  KPI_KEYS.forEach((k) => rows.push(['kpi', k, CSV_LABELS.kpi[k] || k, yearData.kpi[k] ?? '']));
+  rows.push(['memo', 'memo', 'メモ', yearData.memo || '']);
+  return rows;
+}
+
+function rowsToCompanyYear(rows) {
+  const meta = { name: '', ticker: '', favorite: false, standard: 'jgaap' };
+  const yearData = emptyYearData();
+  let year = '';
+  for (let i = 1; i < rows.length; i++) {
+    const [category, key, , value] = rows[i];
+    if (category === 'company') {
+      if (key === 'name') meta.name = value;
+      else if (key === 'ticker') meta.ticker = value;
+      else if (key === 'favorite') meta.favorite = value === '1';
+      else if (key === 'standard') meta.standard = value || 'jgaap';
+    } else if (category === 'meta' && key === 'year') {
+      year = value;
+    } else if (category === 'memo') {
+      yearData.memo = value;
+    } else if (yearData[category] && key in yearData[category]) {
+      yearData[category][key] = value;
+    }
+  }
+  return { meta, year, yearData };
+}
+
+window.KessanCsvUtils = { csvEscape, rowsToCsv, csvToRows, companyYearToRows, rowsToCompanyYear };
+
 // storage: { loadAll(): Promise<{companies}|null>, saveAll(companies): Promise<void> }
 // platform: 'electron' | 'web'
 // folderPath / onChooseFolder: Electron版のみ使用（保存先フォルダの表示・変更）
@@ -345,6 +428,7 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
   const [compareBId, setCompareBId] = useState(null);
   const [compareBYear, setCompareBYear] = useState(null);
   const [compareMode, setCompareMode] = useState('absolute'); // 'absolute' | 'percent'
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -428,6 +512,83 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
     setCompanies(next);
     setActiveCompanyId(trimmed);
     setStatus('');
+    persist(next);
+  }
+
+  async function handleExportCsv() {
+    if (typeof JSZip === 'undefined') {
+      setStatus('csv-error');
+      return;
+    }
+    const zip = new JSZip();
+    let fileCount = 0;
+    Object.keys(companies).forEach((key) => {
+      const comp = companies[key];
+      const ticker = (comp.ticker || key || 'untitled').trim() || 'untitled';
+      Object.keys(comp.years).forEach((year) => {
+        const rows = companyYearToRows(comp, year, comp.years[year]);
+        zip.file(`${ticker}_${year}.csv`, rowsToCsv(rows));
+        fileCount++;
+      });
+    });
+    if (fileCount === 0) { setStatus('csv-empty'); return; }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kessan_note_${new Date().toISOString().slice(0, 10)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus('csv-exported');
+  }
+
+  async function handleImportFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const csvEntries = [];
+    for (const f of files) {
+      const lower = f.name.toLowerCase();
+      if (lower.endsWith('.zip') && typeof JSZip !== 'undefined') {
+        const zip = await JSZip.loadAsync(f);
+        for (const [name, entry] of Object.entries(zip.files)) {
+          if (!entry.dir && name.toLowerCase().endsWith('.csv')) {
+            csvEntries.push({ name, text: await entry.async('string') });
+          }
+        }
+      } else if (lower.endsWith('.csv')) {
+        csvEntries.push({ name: f.name, text: await f.text() });
+      }
+    }
+    if (!csvEntries.length) { setStatus('csv-import-empty'); return; }
+    const next = { ...companies };
+    csvEntries.forEach(({ name, text }) => {
+      const rows = csvToRows(text);
+      const { meta, year, yearData } = rowsToCompanyYear(rows);
+      const m = name.match(/^(.+?)_(\d{4})\.csv$/i);
+      const ticker = (meta.ticker || (m && m[1]) || '').trim();
+      const resolvedYear = year || (m && m[2]) || '';
+      const key = ticker || `imported_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const base = next[key] || emptyCompany();
+      next[key] = {
+        ...base,
+        name: meta.name || base.name,
+        ticker: ticker || base.ticker,
+        favorite: meta.favorite,
+        standard: meta.standard,
+        years: { ...base.years, [resolvedYear]: yearData },
+      };
+    });
+    setCompanies(next);
+    const ids = Object.keys(next);
+    if (ids.length) {
+      const lastId = ids[ids.length - 1];
+      setActiveCompanyId(lastId);
+      const yrs = Object.keys(next[lastId].years).sort();
+      setCurrentYear(yrs.length ? yrs[yrs.length - 1] : null);
+    }
+    setStatus('csv-imported');
     persist(next);
   }
 
@@ -591,6 +752,35 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
           >
             ＋ 会社追加
           </button>
+        </div>
+
+        {/* CSVバックアップ／読み込み（ブラウザのデータが消えても復元できるように） */}
+        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <button
+            onClick={handleExportCsv}
+            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 14, border: `1px solid ${COLORS.border}`, background: '#fff', color: COLORS.inkMuted, cursor: 'pointer' }}
+          >
+            📥 CSVでバックアップ
+          </button>
+          <button
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            style={{ fontSize: 12, padding: '5px 12px', borderRadius: 14, border: `1px solid ${COLORS.border}`, background: '#fff', color: COLORS.inkMuted, cursor: 'pointer' }}
+          >
+            📤 CSVを読み込む
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".csv,.zip"
+            style={{ display: 'none' }}
+            onChange={(e) => { handleImportFiles(e.target.files); e.target.value = ''; }}
+          />
+          {status === 'csv-exported' && <span style={{ fontSize: 12, color: COLORS.teal }}>バックアップをダウンロードしました</span>}
+          {status === 'csv-imported' && <span style={{ fontSize: 12, color: COLORS.teal }}>読み込みました</span>}
+          {status === 'csv-empty' && <span style={{ fontSize: 12, color: COLORS.stamp }}>バックアップするデータがありません</span>}
+          {status === 'csv-import-empty' && <span style={{ fontSize: 12, color: COLORS.stamp }}>CSVファイルが見つかりませんでした</span>}
+          {status === 'csv-error' && <span style={{ fontSize: 12, color: COLORS.stamp }}>読み込みに失敗しました。ページを再読み込みしてもう一度試してください</span>}
         </div>
 
         {!activeCompanyId ? (
@@ -803,7 +993,7 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
                   ))}
                 </div>
 
-                <ChartCard title="📈 P/L比較（会社ごとに1本のグラフ）">
+                <ChartCard title="📈 P/L比較">
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={plMergedData}>
                       <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
@@ -818,7 +1008,7 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
                   </ResponsiveContainer>
                 </ChartCard>
 
-                <ChartCard title="🏦 B/S比較（会社ごとに1本のグラフ）">
+                <ChartCard title="🏦 B/S比較">
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={bsMergedData}>
                       <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
