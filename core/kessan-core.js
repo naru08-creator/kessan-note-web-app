@@ -259,6 +259,17 @@ function buildBsCombinedData(yd) {
   ];
 }
 
+// 各行を「その行の合計を100%とした割合」に変換する（構成比較モード用）
+function toPercentStacked(rows) {
+  return rows.map((row) => {
+    const keys = Object.keys(row).filter((k) => k !== 'name');
+    const total = keys.reduce((s, k) => s + (row[k] || 0), 0) || 1;
+    const out = { name: row.name };
+    keys.forEach((k) => { out[k] = (row[k] || 0) / total * 100; });
+    return out;
+  });
+}
+
 function buildCfWaterfallData(yd) {
   const beginCash = n(yd.cf.beginningCash);
   const opCF = n(yd.cf.opCF), invCF = n(yd.cf.invCF), finCF = n(yd.cf.finCF), fxAdj = n(yd.cf.fxAdjustment);
@@ -272,60 +283,26 @@ function buildCfWaterfallData(yd) {
   ];
 }
 
-// 会社比較ページで使う、1社分の「グラフ表示」と同じチャートセット
-function CompanyChartColumn({ title, yd, derived }) {
-  const plData = buildPlChartData(yd, derived, 'P/L');
-  const bsData = buildBsCombinedData(yd);
+// 会社比較ページで使う、1社分のCFキャッシュフロー滝グラフ（P/L・B/Sは統合比較グラフ側で表示する）
+function CompanyCfColumn({ title, yd }) {
   const cfData = buildCfWaterfallData(yd);
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ fontFamily: "'Zen Old Mincho', serif", fontSize: 16, fontWeight: 700, color: COLORS.ink }}>{title}</div>
-      <ChartCard title="📈 P/L構成（百万円）">
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={plData} layout="vertical" margin={{ left: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-            <XAxis type="number" tick={{ fontSize: 11 }} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Bar dataKey="売上原価" stackId="a" fill={PL_COLORS.cogs} />
-            <Bar dataKey="販管費" stackId="a" fill={PL_COLORS.sga} />
-            <Bar dataKey="営業利益" stackId="a" fill={PL_COLORS.opProfit} />
-            <Bar dataKey="当期純利益" stackId="a" fill={PL_COLORS.netProfit} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-      <ChartCard title="🏦 資産・負債純資産構成（百万円）">
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={bsData}>
-            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Bar dataKey="固定資産" stackId="a" fill={BS_ASSET_COLORS.fixedAssets} />
-            <Bar dataKey="純資産" stackId="a" fill={BS_LIAB_COLORS.equity} />
-            <Bar dataKey="流動資産" stackId="a" fill={BS_ASSET_COLORS.currentAssets} />
-            <Bar dataKey="固定負債" stackId="a" fill={BS_LIAB_COLORS.fixedLiab} />
-            <Bar dataKey="流動負債" stackId="a" fill={BS_LIAB_COLORS.currentLiab} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-      <ChartCard title="💰 キャッシュフロー滝グラフ（百万円）">
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={cfData}>
-            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip content={<CFWaterfallTooltip />} />
-            <Bar dataKey="base" stackId="cf" fill="transparent" legendType="none" isAnimationActive={false} />
-            <Bar dataKey="value" stackId="cf" isAnimationActive={false}>
-              {cfData.map((entry, i) => (
-                <Cell key={i} fill={entry.kind === 'total' ? COLORS.ink : entry.kind === 'up' ? COLORS.teal : COLORS.stamp} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-    </div>
+    <ChartCard title={`💰 ${title} キャッシュフロー滝グラフ（百万円）`}>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={cfData}>
+          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip content={<CFWaterfallTooltip />} />
+          <Bar dataKey="base" stackId="cf" fill="transparent" legendType="none" isAnimationActive={false} />
+          <Bar dataKey="value" stackId="cf" isAnimationActive={false}>
+            {cfData.map((entry, i) => (
+              <Cell key={i} fill={entry.kind === 'total' ? COLORS.ink : entry.kind === 'up' ? COLORS.teal : COLORS.stamp} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
   );
 }
 
@@ -367,6 +344,7 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
   const [compareAYear, setCompareAYear] = useState(null);
   const [compareBId, setCompareBId] = useState(null);
   const [compareBYear, setCompareBYear] = useState(null);
+  const [compareMode, setCompareMode] = useState('absolute'); // 'absolute' | 'percent'
 
   useEffect(() => {
     (async () => {
@@ -512,6 +490,22 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
   const derivedB = cmpB ? computeDerived(cmpB) : null;
   const nameA = compAObj?.name || '会社A';
   const nameB = compBObj?.name || '会社B';
+
+  const plMergedRaw = (cmpA && cmpB) ? [
+    { name: nameA, 売上原価: n(cmpA.pl.cogs), 販管費: n(cmpA.pl.sga), 営業利益: derivedA.opProfit, 当期純利益: n(cmpA.pl.netProfit) },
+    { name: nameB, 売上原価: n(cmpB.pl.cogs), 販管費: n(cmpB.pl.sga), 営業利益: derivedB.opProfit, 当期純利益: n(cmpB.pl.netProfit) },
+  ] : [];
+  const bsMergedRaw = (cmpA && cmpB) ? [
+    { name: `${nameA}・資産`, 固定資産: n(cmpA.bs.fixedAssets), 流動資産: n(cmpA.bs.currentAssets) },
+    { name: `${nameA}・負債純資産`, 純資産: n(cmpA.bs.equity), 固定負債: n(cmpA.bs.fixedLiab), 流動負債: n(cmpA.bs.currentLiab) },
+    { name: `${nameB}・資産`, 固定資産: n(cmpB.bs.fixedAssets), 流動資産: n(cmpB.bs.currentAssets) },
+    { name: `${nameB}・負債純資産`, 純資産: n(cmpB.bs.equity), 固定負債: n(cmpB.bs.fixedLiab), 流動負債: n(cmpB.bs.currentLiab) },
+  ] : [];
+  const plMergedData = compareMode === 'percent' ? toPercentStacked(plMergedRaw) : plMergedRaw;
+  const bsMergedData = compareMode === 'percent' ? toPercentStacked(bsMergedRaw) : bsMergedRaw;
+  const compareTooltipFormatter = (value, name) => compareMode === 'percent'
+    ? [`${Number(value).toFixed(1)}%`, name]
+    : [`${Number(value).toLocaleString()} 百万円`, name];
 
   const kpiCompareRows = (cmpA && cmpB) ? [
     { key: 'roe', label: 'ROE', unit: '%', a: derivedA.roe, b: derivedB.roe },
@@ -792,9 +786,57 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
               </div>
             ) : (
               <>
+                <div className="no-print" style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                  {[{ v: 'percent', label: '📈 構成比較（各社100%）' }, { v: 'absolute', label: '📊 実額比較（共通スケール）' }].map((opt) => (
+                    <button
+                      key={opt.v}
+                      onClick={() => setCompareMode(opt.v)}
+                      style={{
+                        fontSize: 12, padding: '6px 12px', borderRadius: 14,
+                        border: `1px solid ${compareMode === opt.v ? COLORS.teal : COLORS.border}`,
+                        background: compareMode === opt.v ? COLORS.teal : '#fff',
+                        color: compareMode === opt.v ? '#fff' : COLORS.inkMuted, cursor: 'pointer',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <ChartCard title="📈 P/L比較（会社ごとに1本のグラフ）">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={plMergedData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} domain={compareMode === 'percent' ? [0, 100] : undefined} />
+                      <Tooltip formatter={compareTooltipFormatter} /><Legend />
+                      <Bar dataKey="売上原価" stackId="a" fill={PL_COLORS.cogs} />
+                      <Bar dataKey="販管費" stackId="a" fill={PL_COLORS.sga} />
+                      <Bar dataKey="営業利益" stackId="a" fill={PL_COLORS.opProfit} />
+                      <Bar dataKey="当期純利益" stackId="a" fill={PL_COLORS.netProfit} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="🏦 B/S比較（会社ごとに1本のグラフ）">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={bsMergedData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 12 }} domain={compareMode === 'percent' ? [0, 100] : undefined} />
+                      <Tooltip formatter={compareTooltipFormatter} /><Legend />
+                      <Bar dataKey="固定資産" stackId="a" fill={BS_ASSET_COLORS.fixedAssets} />
+                      <Bar dataKey="純資産" stackId="a" fill={BS_LIAB_COLORS.equity} />
+                      <Bar dataKey="流動資産" stackId="a" fill={BS_ASSET_COLORS.currentAssets} />
+                      <Bar dataKey="固定負債" stackId="a" fill={BS_LIAB_COLORS.fixedLiab} />
+                      <Bar dataKey="流動負債" stackId="a" fill={BS_LIAB_COLORS.currentLiab} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                  <CompanyChartColumn title={`${nameA}（${compareAYear}年）`} yd={cmpA} derived={derivedA} />
-                  <CompanyChartColumn title={`${nameB}（${compareBYear}年）`} yd={cmpB} derived={derivedB} />
+                  <CompanyCfColumn title={`${nameA}（${compareAYear}年）`} yd={cmpA} />
+                  <CompanyCfColumn title={`${nameB}（${compareBYear}年）`} yd={cmpB} />
                 </div>
 
                 <div className="chart-card" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '16px 18px' }}>
