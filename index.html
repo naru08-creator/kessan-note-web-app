@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>決算ノート</title>
+<meta name="description" content="決算書を「読む」のではなく「比べて理解する」ための初心者向け決算比較ツール" />
+
+<!-- React / ReactDOM -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Recharts（内部でprop-types / d3系を利用） -->
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
+<!-- JSXをブラウザ上でその場変換（ビルド不要） -->
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+  html, body { margin: 0; padding: 0; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- 共通コア（Electron版と同じファイルをそのまま読み込む） -->
+<script type="text/babel" src="./core/kessan-core.js"></script>
+
+<!-- Web版専用：localStorageを使った保存アダプタ -->
+<script type="text/babel">
+  const STORAGE_KEY = 'kessan-note:companies';
+
+  const webStorageAdapter = {
+    async loadAll() {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) {
+        console.error('localStorageの読み込みに失敗しました', e);
+        return null;
+      }
+    },
+    async saveAll(companies) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ companies }));
+    },
+  };
+
+  function App() {
+    return <window.KessanNoteCore storage={webStorageAdapter} platform="web" />;
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+</script>
+</body>
+</html>
