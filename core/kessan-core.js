@@ -318,6 +318,27 @@ function CFWaterfallTooltip({ active, payload, label }) {
   );
 }
 
+// Admax等の広告scriptタグを安全に差し込むための枠。
+// JSXやinnerHTMLに直接<script>を書いても実行されないため、DOM APIで生成している。
+function AdSlot({ src }) {
+  const containerRef = useRef(null);
+  useEffect(() => {
+    if (!containerRef.current || !src) return;
+    containerRef.current.innerHTML = '';
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    containerRef.current.appendChild(script);
+  }, [src]);
+  return (
+    <div
+      ref={containerRef}
+      className="no-print"
+      style={{ display: 'flex', justifyContent: 'center', margin: '14px 0', minHeight: 1 }}
+    />
+  );
+}
+
 function ChartCard({ title, children }) {
   return (
     <div className="chart-card" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '16px 18px' }}>
@@ -782,6 +803,8 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder, license
           {status === 'csv-import-empty' && <span style={{ fontSize: 12, color: COLORS.stamp }}>CSVファイルが見つかりませんでした</span>}
           {status === 'csv-error' && <span style={{ fontSize: 12, color: COLORS.stamp }}>読み込みに失敗しました。ページを再読み込みしてもう一度試してください</span>}
         </div>
+
+        {platform === 'web' && <AdSlot src="https://adm.shinobi.jp/s/e1df715adc5bcc8924f8591f00cb48a8" />}
 
         {!activeCompanyId ? (
           <div style={{
@@ -1269,6 +1292,8 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder, license
         )}
         </>
         )}
+
+        {platform === 'web' && <AdSlot src="https://adm.shinobi.jp/s/e6b53f390f9eb0365c81341a330df8f3" />}
 
         <div className="no-print" style={{
           textAlign: 'center', fontSize: 11, color: COLORS.inkMuted, marginTop: 32,
