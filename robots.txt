@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://naru08-creator.github.io/kessan-note-web-app/sitemap.xml

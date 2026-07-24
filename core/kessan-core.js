@@ -413,7 +413,7 @@ window.KessanCsvUtils = { csvEscape, rowsToCsv, csvToRows, companyYearToRows, ro
 // storage: { loadAll(): Promise<{companies}|null>, saveAll(companies): Promise<void> }
 // platform: 'electron' | 'web'
 // folderPath / onChooseFolder: Electron版のみ使用（保存先フォルダの表示・変更）
-function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
+function KessanNoteCore({ storage, platform, folderPath, onChooseFolder, licenseUrl, copyrightHolder }) {
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState({});
   const [activeCompanyId, setActiveCompanyId] = useState(null);
@@ -1269,6 +1269,20 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder }) {
         )}
         </>
         )}
+
+        <div className="no-print" style={{
+          textAlign: 'center', fontSize: 11, color: COLORS.inkMuted, marginTop: 32,
+          paddingTop: 14, borderTop: `1px solid ${COLORS.border}`,
+        }}>
+          © {new Date().getFullYear()} {copyrightHolder || 'えるぴょん'}　本ツールは{' '}
+          <a
+            href={licenseUrl || 'https://github.com/naru08-creator/kessan-note-web-app?tab=License-1-ov-file'}
+            target="_blank" rel="noopener noreferrer"
+            style={{ color: COLORS.inkMuted, textDecoration: 'underline' }}
+          >
+            PolyForm Noncommercial License 1.0.0
+          </a>{' '}のもとで公開しています
+        </div>
       </div>
     </div>
   );

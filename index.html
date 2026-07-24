@@ -3,8 +3,18 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>決算ノート</title>
-<meta name="description" content="決算書を「読む」のではなく「比べて理解する」ための初心者向け決算比較ツール" />
+<title>決算ノート｜決算書を「比べて」理解する無料ツール</title>
+<meta name="description" content="決算書を読むのが苦手な人向けの決算比較ツール。P/L・B/S・キャッシュフローを入力するだけで自動計算・グラフ化し、複数年の推移や他社との比較がひと目で分かります。" />
+<link rel="canonical" href="https://naru08-creator.github.io/kessan-note-web-app/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="決算ノート｜決算書を「比べて」理解する無料ツール" />
+<meta property="og:description" content="決算書を読むのが苦手な人向けの決算比較ツール。数字を入れるだけで自動計算・グラフ化し、複数年の推移や他社との比較がひと目で分かります。" />
+<meta property="og:url" content="https://naru08-creator.github.io/kessan-note-web-app/" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="決算ノート｜決算書を「比べて」理解する無料ツール" />
+<meta name="twitter:description" content="決算書を読むのが苦手な人向けの決算比較ツール。数字を入れるだけで自動計算・グラフ化できます。" />
 
 <!-- React / ReactDOM -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -49,7 +59,14 @@
   };
 
   function App() {
-    return <window.KessanNoteCore storage={webStorageAdapter} platform="web" />;
+    return (
+      <window.KessanNoteCore
+        storage={webStorageAdapter}
+        platform="web"
+        licenseUrl="https://github.com/naru08-creator/kessan-note-web-app?tab=License-1-ov-file"
+        copyrightHolder="えるぴょん"
+      />
+    );
   }
 
   const root = ReactDOM.createRoot(document.getElementById('root'));
