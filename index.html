@@ -28,12 +28,59 @@
 <script crossorigin src="https://unpkg.com/jszip@3/dist/jszip.min.js"></script>
 
 <style>
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; background: #E9EEE1; }
   #root { min-height: 100vh; }
+
+  /* ブログへ戻る導線 */
+  .site-topbar {
+    max-width: 880px; margin: 0 auto; padding: 10px 16px 0;
+    font-family: 'Zen Kaku Gothic New', sans-serif; font-size: 13px;
+  }
+  .site-topbar a {
+    color: #5B6B5F; text-decoration: none; border-bottom: 1px solid #C7D0BC;
+  }
+  .site-topbar a:hover { color: #1E2A3A; }
+
+  /* 広告枠：Admaxのコードが発行されたら、この中にそのまま貼り付ける想定。
+     中身が空の間は場所を取らないよう高さ0にしてある。 */
+  .ad-slot {
+    max-width: 880px; margin: 0 auto; padding: 0 16px;
+    display: flex; justify-content: center;
+  }
+  .ad-slot:empty { display: none; }
+  .ad-slot--header { padding-top: 12px; }
+  .ad-slot--footer { padding-bottom: 24px; }
+
+  /* サイドレール広告：PC幅が十分広いときだけ表示（狭い画面・スマホでは出さない） */
+  .ad-rail {
+    position: fixed; top: 50%; transform: translateY(-50%);
+    width: 160px; display: none;
+  }
+  .ad-rail--left { left: 16px; }
+  .ad-rail--right { right: 16px; }
+  @media (min-width: 1300px) {
+    .ad-rail:not(:empty) { display: block; }
+  }
 </style>
 </head>
 <body>
+<div class="site-topbar">
+  <a href="https://erupyon.hatenablog.com/" target="_blank" rel="noopener noreferrer">← えるぴょんのゆる投資日記に戻る</a>
+</div>
+
+<!-- ヘッダー広告枠：Admaxのコードが発行されたら、このdivの中に貼る -->
+<div class="ad-slot ad-slot--header" id="ad-header"></div>
+
+<!-- サイドレール広告枠（左）：PC幅が広いときだけ表示 -->
+<div class="ad-rail ad-rail--left" id="ad-rail-left"></div>
+<!-- サイドレール広告枠（右）：PC幅が広いときだけ表示 -->
+<div class="ad-rail ad-rail--right" id="ad-rail-right"></div>
+
 <div id="root"></div>
+
+<!-- フッター広告枠：Admaxのコードが発行されたら、このdivの中に貼る -->
+<div class="ad-slot ad-slot--footer" id="ad-footer"></div>
+
 
 <!-- 共通コア（Electron版と同じファイルをそのまま読み込む） -->
 <script type="text/babel" src="./core/kessan-core.js"></script>
