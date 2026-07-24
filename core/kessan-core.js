@@ -319,22 +319,46 @@ function CFWaterfallTooltip({ active, payload, label }) {
 }
 
 // Admax等の広告scriptタグを安全に差し込むための枠。
-// JSXやinnerHTMLに直接<script>を書いても実行されないため、DOM APIで生成している。
+// これらの広告タグは内部でdocument.write()を使っていることが多く、ページ読み込み後に
+// JSで動的挿入されたscriptからのdocument.write()は最近のブラウザで無視されてしまう。
+// そのため、専用のiframeを作ってその中の真っさらなドキュメントに書き込む形にしている。
 function AdSlot({ src }) {
   const containerRef = useRef(null);
   useEffect(() => {
     if (!containerRef.current || !src) return;
     containerRef.current.innerHTML = '';
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    containerRef.current.appendChild(script);
+    const iframe = document.createElement('iframe');
+    iframe.style.border = 'none';
+    iframe.style.width = '100%';
+    iframe.style.minHeight = '1px';
+    iframe.scrolling = 'no';
+    containerRef.current.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(
+      '<!DOCTYPE html><html><head><style>html,body{margin:0;padding:0;display:flex;justify-content:center;overflow:hidden;}</style></head>' +
+      '<body><script src="' + src + '"><' + '/script></body></html>'
+    );
+    doc.close();
+
+    // 広告は遅れて読み込まれることが多いので、高さを数秒ポーリングして自動調整する
+    const resize = () => {
+      try {
+        const h = doc.body ? doc.body.scrollHeight : 0;
+        if (h > 0) iframe.style.height = h + 'px';
+      } catch (e) { /* no-op */ }
+    };
+    iframe.addEventListener('load', resize);
+    const poll = setInterval(resize, 500);
+    const stop = setTimeout(() => clearInterval(poll), 6000);
+    return () => { clearInterval(poll); clearTimeout(stop); };
   }, [src]);
   return (
     <div
       ref={containerRef}
       className="no-print"
-      style={{ display: 'flex', justifyContent: 'center', margin: '14px 0', minHeight: 1 }}
+      style={{ display: 'flex', justifyContent: 'center', margin: '14px 0' }}
     />
   );
 }
