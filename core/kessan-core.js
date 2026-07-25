@@ -676,6 +676,21 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder, license
   const bsCombinedData = cur ? buildBsCombinedData(cur) : [];
   const cfWaterfallData = cur ? buildCfWaterfallData(cur) : [];
 
+  // 直近5年分まで（データがそれ未満ならある分だけ）を1画面で並べて見るための集計
+  const recentYears = sortedYears.slice(-5);
+  const plMultiYearData = comp ? recentYears.map((y) => {
+    const yd = comp.years[y];
+    return buildPlChartData(yd, computeDerived(yd), y)[0];
+  }) : [];
+  const bsAssetMultiYearData = comp ? recentYears.map((y) => {
+    const yd = comp.years[y];
+    return { name: y, 固定資産: n(yd.bs.fixedAssets), 流動資産: n(yd.bs.currentAssets) };
+  }) : [];
+  const bsLiabMultiYearData = comp ? recentYears.map((y) => {
+    const yd = comp.years[y];
+    return { name: y, 純資産: n(yd.bs.equity), 固定負債: n(yd.bs.fixedLiab), 流動負債: n(yd.bs.currentLiab) };
+  }) : [];
+
   const trendData = comp ? sortedYears.map((y) => {
     const d = computeDerived(comp.years[y]);
     return {
@@ -1255,6 +1270,53 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder, license
                   濃紺＝期首・期末残高、緑＝資金の増加、赤＝資金の減少
                 </div>
               </ChartCard>
+
+              {recentYears.length >= 2 && (
+                <>
+                  <ChartCard title={`📈 P/L構成の推移（直近${recentYears.length}年・百万円）`}>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={plMultiYearData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip /><Legend />
+                        <Bar dataKey="売上原価" stackId="a" fill={PL_COLORS.cogs} />
+                        <Bar dataKey="販管費" stackId="a" fill={PL_COLORS.sga} />
+                        <Bar dataKey="営業利益" stackId="a" fill={PL_COLORS.opProfit} />
+                        <Bar dataKey="当期純利益" stackId="a" fill={PL_COLORS.netProfit} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartCard>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <ChartCard title={`🏦 資産構成の推移（直近${recentYears.length}年）`}>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={bsAssetMultiYearData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip /><Legend />
+                          <Bar dataKey="固定資産" stackId="a" fill={BS_ASSET_COLORS.fixedAssets} />
+                          <Bar dataKey="流動資産" stackId="a" fill={BS_ASSET_COLORS.currentAssets} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </ChartCard>
+                    <ChartCard title={`🏦 負債・純資産構成の推移（直近${recentYears.length}年）`}>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={bsLiabMultiYearData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip /><Legend />
+                          <Bar dataKey="純資産" stackId="a" fill={BS_LIAB_COLORS.equity} />
+                          <Bar dataKey="固定負債" stackId="a" fill={BS_LIAB_COLORS.fixedLiab} />
+                          <Bar dataKey="流動負債" stackId="a" fill={BS_LIAB_COLORS.currentLiab} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </ChartCard>
+                  </div>
+                </>
+              )}
 
               {sortedYears.length >= 1 && (
                 <>
