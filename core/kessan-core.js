@@ -388,10 +388,12 @@ function csvEscape(v) {
 }
 
 function rowsToCsv(rows) {
-  return rows.map((r) => r.map(csvEscape).join(',')).join('\n');
+  // 先頭にBOMを付けないと、Excelで開いたときに日本語が文字化けする
+  return '\uFEFF' + rows.map((r) => r.map(csvEscape).join(',')).join('\n');
 }
 
 function csvToRows(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
   const rows = [];
   let i = 0, field = '', row = [], inQuotes = false;
   while (i < text.length) {
