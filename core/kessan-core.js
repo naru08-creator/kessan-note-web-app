@@ -1317,6 +1317,17 @@ function KessanNoteCore({ storage, platform, folderPath, onChooseFolder, license
                       </ResponsiveContainer>
                     </ChartCard>
                   </div>
+
+                  <div>
+                    <div style={{ fontFamily: "'Zen Old Mincho', serif", fontSize: 15, marginBottom: 10, color: COLORS.ink }}>
+                      💰 キャッシュフロー滝グラフの推移（直近{recentYears.length}年）
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                      {recentYears.map((y) => (
+                        <CompanyCfColumn key={y} title={`${y}年`} yd={comp.years[y]} />
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
 
